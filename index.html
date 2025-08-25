@@ -91,9 +91,11 @@
   </footer>
 
 <script>
-const API_URL = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&days=1&location=true&results=200";
+const API_URL = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&days=1&location=true&results=8000";
 const REFRESH_MS = 60000;
-let map, chart;
+const TOP_SPEED = 12;
+
+let map, chart, marker, startMarker, endMarker;
 
 function toDutchNumber(val) {
   return (val !== null && !isNaN(val)) ? val.toFixed(1).replace('.', ',') : "--";
@@ -104,10 +106,11 @@ function toAmsterdamTime(utcString) {
   return date.toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" });
 }
 
-function speedColor(speed) {
-  if (speed < 4) return "green";
-  if (speed < 8) return "orange";
-  return "red";
+function speedColor(speed){
+  const ratio=Math.min(speed/TOP_SPEED,1);
+  if(ratio<0.33) return `rgb(0,${Math.floor(255*ratio*3)},255)`;
+  if(ratio<0.66) return `rgb(${Math.floor(255*(ratio-0.33)*3)},255,255)`;
+  return `rgb(255,${Math.floor(255*(1-(ratio-0.66)*3))},0)`;
 }
 
 function initMap() {
@@ -116,6 +119,7 @@ function initMap() {
     maxZoom: 18
   }).addTo(map);
   addSpeedLegend();
+  marker = L.marker([52,5]).addTo(map);
 }
 
 function addSpeedLegend() {
@@ -135,7 +139,7 @@ function addSpeedLegend() {
 async function fetchData() {
   const res = await fetch(API_URL);
   const data = await res.json();
-  const feeds = data.feeds;
+  const feeds = data.feeds.filter(f=>f.latitude && f.longitude);
   if (!feeds.length) return;
   const latest = feeds[feeds.length-1];
 
@@ -143,52 +147,49 @@ async function fetchData() {
   document.getElementById("voltage").textContent = toDutchNumber(parseFloat(latest.field1));
   document.getElementById("temperature").textContent = toDutchNumber(parseFloat(latest.field2));
   document.getElementById("float").textContent = latest.field3 == "1" ? "ON" : "OFF";
-
   document.getElementById("lastUpdate").textContent = toAmsterdamTime(latest.created_at);
 
-  // Map logic with colored segments + blue dots
+  // Clear old layers (except basemap)
   map.eachLayer(l => { if (l instanceof L.Polyline || l instanceof L.CircleMarker) map.removeLayer(l); });
+  if (startMarker) map.removeLayer(startMarker);
+  if (endMarker) map.removeLayer(endMarker);
 
-  const latlngs = [];
-  let lastMarker = null;
+  const latlngs = feeds.map(f=>[parseFloat(f.latitude), parseFloat(f.longitude), parseFloat(f.field4)||0]);
 
-  for (let i = 1; i < feeds.length; i++) {
-    const prev = feeds[i-1];
-    const curr = feeds[i];
-    if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
-      const latlng1 = [parseFloat(prev.latitude), parseFloat(prev.longitude)];
-      const latlng2 = [parseFloat(curr.latitude), parseFloat(curr.longitude)];
-      const spd = parseFloat(curr.field4) || 0;
-
-      // colored segment
-      L.polyline([latlng1, latlng2], { color: speedColor(spd), weight: 3 }).addTo(map);
-
-      // blue dot with popup
-      const popupContent = `
-        <b>${toAmsterdamTime(curr.created_at)}</b><br>
-        🚤 Speed: ${toDutchNumber(parseFloat(curr.field4))} km/h<br>
-        🔋 Voltage: ${toDutchNumber(parseFloat(curr.field1))} V<br>
-        🌡 Temp: ${toDutchNumber(parseFloat(curr.field2))} °C<br>
-        💧 Float: ${curr.field3 == "1" ? "ON" : "OFF"}
-      `;
-      const marker = L.circleMarker(latlng2, {
-        radius: 5,
-        fillColor: "blue",
-        color: "blue",
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.7
-      }).addTo(map).bindPopup(popupContent);
-
-      latlngs.push(latlng1, latlng2);
-      lastMarker = marker;
-    }
+  // Draw colored segments for speed
+  for(let i=0;i<latlngs.length-1;i++){
+    L.polyline([latlngs[i],latlngs[i+1]],{color:speedColor(latlngs[i][2]),weight:4}).addTo(map);
   }
 
-  if (latlngs.length > 0) {
-    map.fitBounds(latlngs, {padding:[30,30]});
-    if (lastMarker) lastMarker.openPopup();
+  // Start & End markers
+  if(latlngs.length>0){
+    startMarker=L.marker(latlngs[0],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190411.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("Start");
+    endMarker=L.marker(latlngs[latlngs.length-1],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190423.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("End");
   }
+
+  // Waypoints every 10 points
+  for(let i=0;i<latlngs.length;i+=10){
+    const f=feeds[i];
+    const popupContent = `
+      <b>${toAmsterdamTime(f.created_at)}</b><br>
+      🚤 Speed: ${toDutchNumber(parseFloat(f.field4))} km/h<br>
+      🔋 Voltage: ${toDutchNumber(parseFloat(f.field1))} V<br>
+      🌡 Temp: ${toDutchNumber(parseFloat(f.field2))} °C<br>
+      💧 Float: ${f.field3 == "1" ? "ON" : "OFF"}
+    `;
+    L.circleMarker([f.latitude, f.longitude],{radius:4,color:'blue',fillOpacity:0.7}).addTo(map).bindPopup(popupContent);
+  }
+
+  // Update moving marker
+  marker.setLatLng([latest.latitude, latest.longitude]).bindPopup(`
+    <b>Latest</b><br>
+    🚤 Speed: ${toDutchNumber(parseFloat(latest.field4))} km/h<br>
+    🔋 Voltage: ${toDutchNumber(parseFloat(latest.field1))} V<br>
+    🌡 Temp: ${toDutchNumber(parseFloat(latest.field2))} °C<br>
+    💧 Float: ${latest.field3 == "1" ? "ON" : "OFF"}
+  `);
+
+  map.fitBounds(latlngs, {padding:[30,30]});
 }
 
 function showChart(type) {
