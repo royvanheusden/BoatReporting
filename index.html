@@ -77,9 +77,7 @@
       display: flex;
       flex-direction: column;
     }
-    #chartCanvas {
-      flex: 1;
-    }
+    #chartCanvas { flex: 1; }
     .close {
       color: #fff;
       float: right;
@@ -144,7 +142,7 @@
     const API_KEY = "W5FGDFBD5PK7GY2T";
     const REFRESH_MS = 60000; // 60s
 
-    let map, polyline, chart;
+    let map, chart;
 
     function speedColor(speed) {
       if (speed <= 4) return "#2ecc71"; // green
@@ -157,7 +155,6 @@
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap"
       }).addTo(map);
-      polyline = L.polyline([], { color: "#1ecbe1" }).addTo(map);
     }
 
     function addSpeedLegend() {
@@ -174,6 +171,15 @@
       legend.addTo(map);
     }
 
+    function toDutchNumber(num) {
+      return num.toFixed(1).replace(".", ",");
+    }
+
+    function toAmsterdamTime(utcString) {
+      const date = new Date(utcString);
+      return date.toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" });
+    }
+
     async function fetchData() {
       const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${API_KEY}&days=1&location=true`;
       const res = await fetch(url);
@@ -183,32 +189,29 @@
       if (feeds.length === 0) return;
 
       const last = feeds[feeds.length-1];
-      document.getElementById("speed").textContent = parseFloat(last.field4).toFixed(1);
-      document.getElementById("voltage").textContent = parseFloat(last.field1).toFixed(1);
-      document.getElementById("temperature").textContent = parseFloat(last.field2).toFixed(1);
+      document.getElementById("speed").textContent = toDutchNumber(parseFloat(last.field4));
+      document.getElementById("voltage").textContent = toDutchNumber(parseFloat(last.field1));
+      document.getElementById("temperature").textContent = toDutchNumber(parseFloat(last.field2));
       document.getElementById("float").textContent = last.field3 == "1" ? "ON" : "OFF";
 
-      // Update footer time
-      document.getElementById("lastUpdate").textContent = new Date().toLocaleString();
+      // Last update footer (convert UTC to Amsterdam)
+      document.getElementById("lastUpdate").textContent = toAmsterdamTime(last.created_at);
 
-      // Map
+      // Map with colored segments
       const latlngs = [];
-      feeds.forEach((f,i) => {
-        if (f.latitude && f.longitude) {
-          const lat = parseFloat(f.latitude), lng = parseFloat(f.longitude);
-          latlngs.push([lat,lng]);
-          if (i % 10 === 0) {
-            L.circleMarker([lat,lng], {
-              radius: 3,
-              color: "#3498db",
-              fillOpacity: 0.7
-            }).addTo(map);
-          }
+      for (let i = 1; i < feeds.length; i++) {
+        const prev = feeds[i-1];
+        const curr = feeds[i];
+        if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+          const latlng1 = [parseFloat(prev.latitude), parseFloat(prev.longitude)];
+          const latlng2 = [parseFloat(curr.latitude), parseFloat(curr.longitude)];
+          const spd = parseFloat(curr.field4) || 0;
+          L.polyline([latlng1, latlng2], { color: speedColor(spd), weight: 3 }).addTo(map);
+          latlngs.push(latlng1, latlng2);
         }
-      });
-      polyline.setLatLngs(latlngs);
+      }
       if (latlngs.length>0) {
-        map.fitBounds(polyline.getBounds(), {padding:[30,30]});
+        map.fitBounds(latlngs, {padding:[30,30]});
         L.marker(latlngs[0], {title:"Start", icon: L.divIcon({className:"", html:"<span style='color:lime'>⬤ Start</span>"})}).addTo(map);
         L.marker(latlngs[latlngs.length-1], {title:"End", icon: L.divIcon({className:"", html:"<span style='color:red'>⬤ End</span>"})}).addTo(map);
       }
@@ -222,7 +225,7 @@
         .then(res=>res.json())
         .then(data=>{
           const feeds = data.feeds;
-          const labels = feeds.map(f=> new Date(f.created_at).toLocaleTimeString());
+          const labels = feeds.map(f=> toAmsterdamTime(f.created_at));
           let values;
           if (type==="Speed") values = feeds.map(f=> parseFloat(f.field4));
           if (type==="Voltage") values = feeds.map(f=> parseFloat(f.field1));
