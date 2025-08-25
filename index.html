@@ -1,34 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Boat Live Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <!-- Chart.js -->
+  <meta charset="UTF-8" />
+  <title>Boat Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-    body { margin:0; font-family:Arial,sans-serif; background: linear-gradient(to bottom, #0a2540, #093a59, #02111d); color:#e0f7ff; }
-    header { display:flex; justify-content:space-between; align-items:center; padding:1rem; background:rgba(10,40,70,0.8);}
-    header h1 { margin:0; font-size:1.4rem; }
-    button { background:#136f9c; border:none; padding:0.5rem 1rem; border-radius:8px; color:white; cursor:pointer;}
-    main { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:1rem;}
-    .card { background: rgba(15,50,80,0.7); border-radius:16px; padding:1rem; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.3); cursor:pointer; transition: transform 0.2s; }
-    .card:hover { transform: scale(1.03);}
-    .card h2 { margin:0.3rem 0; font-size:1.1rem;}
-    .value { font-size:2rem; font-weight:bold; margin-top:0.3rem;} /* compact live values */
-    #map { grid-column: span 2; height:450px; border-radius:16px; overflow:hidden;}
-    footer { text-align:center; font-size:0.8rem; padding:1rem; color:#a0c7e0;}
-    /* Modal for charts */
-    #modal { position:fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; z-index:1000;}
-    #modal-content { background:#0a2540; padding:1rem; border-radius:12px; max-width:95%; max-height:95%; color:white;}
-    #modal canvas { width:100%; height:500px;} /* large chart */
-    #closeBtn { background:#136f9c; border:none; color:white; padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; margin-bottom:0.5rem;}
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(to bottom, #001f3f, #003f5c);
+      color: #e0f7ff;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      padding: 1rem;
+      text-align: center;
+      background: #002f47;
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 1rem;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .card:hover { transform: scale(1.05); }
+    .label { font-size: 1rem; margin-bottom: 0.5rem; }
+    .value { font-size: 2rem; font-weight: bold; }
+    #map {
+      flex: 1;
+      margin: 1rem;
+      border-radius: 1rem;
+      overflow: hidden;
+    }
+    footer {
+      text-align:center;
+      padding:10px;
+      font-size:0.9rem;
+      color:#a0cbe3;
+    }
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0; top: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+    }
+    .modal-content {
+      background: #003f5c;
+      margin: 5% auto;
+      padding: 1rem;
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 800px;
+      height: 500px;
+      display: flex;
+      flex-direction: column;
+    }
+    #chartCanvas {
+      flex: 1;
+    }
+    .close {
+      color: #fff;
+      float: right;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
     /* Legend */
-    .leaflet-bottom.leaflet-left .legend {
+    .legend {
       background: rgba(10,40,70,0.8);
       padding: 6px 10px;
       border-radius: 8px;
@@ -45,60 +104,60 @@
   </style>
 </head>
 <body>
+  <header>⛵ Boat Live Dashboard</header>
 
-  <header>
-    <h1>⚓ Boat Live Dashboard</h1>
-    <button onclick="fetchData()">Refresh</button>
-  </header>
-
-  <main>
-    <div class="card" onclick="showChart('field4','Speed (km/h)','km/h')">
-      <h2>Speed</h2>
+  <div class="dashboard">
+    <div class="card" onclick="showChart('Speed','km/h')">
+      <div class="label">Speed</div>
       <div id="speed" class="value">--</div>
     </div>
-    <div class="card" onclick="showChart('field1','Voltage (V)','V')">
-      <h2>Voltage</h2>
+    <div class="card" onclick="showChart('Voltage','V')">
+      <div class="label">Voltage</div>
       <div id="voltage" class="value">--</div>
     </div>
-    <div class="card" onclick="showChart('field2','Temperature (°C)','°C')">
-      <h2>Temperature</h2>
+    <div class="card" onclick="showChart('Temperature','°C')">
+      <div class="label">Temperature</div>
       <div id="temperature" class="value">--</div>
     </div>
     <div class="card">
-      <h2>Float Sensor</h2>
+      <div class="label">Float Sensor</div>
       <div id="float" class="value">--</div>
     </div>
-    <div id="map"></div>
-  </main>
+  </div>
+
+  <div id="map"></div>
 
   <footer>
-    Data from ThingSpeak • Auto-refresh every 15s
+    Last update: <span id="lastUpdate">loading…</span>
   </footer>
 
   <!-- Modal -->
-  <div id="modal">
-    <div id="modal-content">
-      <button id="closeBtn" onclick="closeModal()">Close</button>
-      <h3 id="chartTitle"></h3>
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
       <canvas id="chartCanvas"></canvas>
     </div>
   </div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const API_LATEST = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=1&location=true&days=1";
-    const API_HISTORY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=200&location=true&days=1";
-    const API_FULL_DAY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=8000&location=true&days=1";
-    const REFRESH_MS = 15000;
-    const TOP_SPEED = 12;
+    const CHANNEL_ID = "2831954";
+    const API_KEY = "W5FGDFBD5PK7GY2T";
+    const REFRESH_MS = 60000; // 60s
 
-    let map, marker, chart, polyline, startMarker, endMarker;
+    let map, polyline, chart;
 
-    function initMap(lat=52,lng=5){
-      map = L.map("map").setView([lat,lng],12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
-      marker=L.marker([lat,lng]).addTo(map);
+    function speedColor(speed) {
+      if (speed <= 4) return "#2ecc71"; // green
+      if (speed <= 8) return "#f1c40f"; // yellow
+      return "#e74c3c"; // red
+    }
+
+    function initMap() {
+      map = L.map("map").setView([52, 5], 7);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap"
+      }).addTo(map);
+      polyline = L.polyline([], { color: "#1ecbe1" }).addTo(map);
     }
 
     function addSpeedLegend() {
@@ -115,101 +174,91 @@
       legend.addTo(map);
     }
 
-    function speedColor(speed){
-      const ratio=Math.min(speed/TOP_SPEED,1);
-      if(ratio<0.33) return `rgb(0,${Math.floor(255*ratio*3)},255)`;
-      if(ratio<0.66) return `rgb(${Math.floor(255*(ratio-0.33)*3)},255,255)`;
-      return `rgb(255,${Math.floor(255*(1-(ratio-0.66)*3))},0)`;
+    async function fetchData() {
+      const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${API_KEY}&days=1&location=true`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const feeds = data.feeds;
+
+      if (feeds.length === 0) return;
+
+      const last = feeds[feeds.length-1];
+      document.getElementById("speed").textContent = parseFloat(last.field4).toFixed(1);
+      document.getElementById("voltage").textContent = parseFloat(last.field1).toFixed(1);
+      document.getElementById("temperature").textContent = parseFloat(last.field2).toFixed(1);
+      document.getElementById("float").textContent = last.field3 == "1" ? "ON" : "OFF";
+
+      // Update footer time
+      document.getElementById("lastUpdate").textContent = new Date().toLocaleString();
+
+      // Map
+      const latlngs = [];
+      feeds.forEach((f,i) => {
+        if (f.latitude && f.longitude) {
+          const lat = parseFloat(f.latitude), lng = parseFloat(f.longitude);
+          latlngs.push([lat,lng]);
+          if (i % 10 === 0) {
+            L.circleMarker([lat,lng], {
+              radius: 3,
+              color: "#3498db",
+              fillOpacity: 0.7
+            }).addTo(map);
+          }
+        }
+      });
+      polyline.setLatLngs(latlngs);
+      if (latlngs.length>0) {
+        map.fitBounds(polyline.getBounds(), {padding:[30,30]});
+        L.marker(latlngs[0], {title:"Start", icon: L.divIcon({className:"", html:"<span style='color:lime'>⬤ Start</span>"})}).addTo(map);
+        L.marker(latlngs[latlngs.length-1], {title:"End", icon: L.divIcon({className:"", html:"<span style='color:red'>⬤ End</span>"})}).addTo(map);
+      }
     }
 
-    async function fetchData(){
-      try {
-        const res=await fetch(API_LATEST);
-        const json=await res.json();
-        const latest=json.feeds[json.feeds.length-1];
+    function showChart(type, unit) {
+      document.getElementById("modal").style.display = "block";
+      if (chart) chart.destroy();
 
-        document.getElementById("speed").textContent = latest.field4 ? parseFloat(latest.field4).toFixed(1)+" km/h":"--";
-        document.getElementById("voltage").textContent = latest.field1 ? parseFloat(latest.field1).toFixed(1)+" V":"--";
-        document.getElementById("temperature").textContent = latest.field2 ? parseFloat(latest.field2).toFixed(1)+" °C":"--";
-        document.getElementById("float").textContent = latest.field3==="1"?"Active":"Inactive";
+      fetch(`https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${API_KEY}&results=200`)
+        .then(res=>res.json())
+        .then(data=>{
+          const feeds = data.feeds;
+          const labels = feeds.map(f=> new Date(f.created_at).toLocaleTimeString());
+          let values;
+          if (type==="Speed") values = feeds.map(f=> parseFloat(f.field4));
+          if (type==="Voltage") values = feeds.map(f=> parseFloat(f.field1));
+          if (type==="Temperature") values = feeds.map(f=> parseFloat(f.field2));
 
-        if(latest.latitude && latest.longitude){
-          const lat=parseFloat(latest.latitude);
-          const lng=parseFloat(latest.longitude);
-          map.setView([lat,lng],13);
-          marker.setLatLng([lat,lng]).bindPopup(
-            `Speed: ${latest.field4?parseFloat(latest.field4).toFixed(1):"--"} km/h<br>`+
-            `Voltage: ${latest.field1?parseFloat(latest.field1).toFixed(1):"--"} V<br>`+
-            `Temp: ${latest.field2?parseFloat(latest.field2).toFixed(1):"--"} °C<br>`+
-            `Float: ${latest.field3==="1"?"Active":"Inactive"}`
-          );
-        }
-
-        await plotFullTrip();
-      } catch(e){console.error("Fetch error:",e);}
-    }
-
-    async function plotFullTrip(){
-      try {
-        const res=await fetch(API_FULL_DAY);
-        const json=await res.json();
-        const feeds=json.feeds.filter(f=>f.latitude && f.longitude);
-        const latlngs=feeds.map(f=>[parseFloat(f.latitude),parseFloat(f.longitude),parseFloat(f.field4)||0]);
-
-        // Remove old layers
-        if(polyline) map.removeLayer(polyline);
-        if(startMarker) map.removeLayer(startMarker);
-        if(endMarker) map.removeLayer(endMarker);
-
-        // Draw colored segments for speed
-        for(let i=0;i<latlngs.length-1;i++){
-          L.polyline([latlngs[i],latlngs[i+1]],{color:speedColor(latlngs[i][2]),weight:4}).addTo(map);
-        }
-
-        // Start & End markers
-        if(latlngs.length>0){
-          startMarker=L.marker(latlngs[0],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190411.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("Start");
-          endMarker=L.marker(latlngs[latlngs.length-1],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190423.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("End");
-        }
-
-        // Waypoints every 10 points
-        for(let i=0;i<latlngs.length;i+=10){
-          L.circleMarker(latlngs[i],{radius:4,color:'blue',fillOpacity:0.7}).addTo(map);
-        }
-
-      } catch(e){console.error("Trip plot error:",e);}
-    }
-
-    async function showChart(field,title,unit){
-      try {
-        const res=await fetch(API_HISTORY);
-        const json=await res.json();
-        const feeds=json.feeds;
-
-        const labels=feeds.map(f=>new Date(f.created_at).toLocaleTimeString());
-        const values=feeds.map(f=>parseFloat(f[field])).filter(v=>!isNaN(v));
-
-        document.getElementById("chartTitle").textContent=title;
-
-        if(chart) chart.destroy();
-        chart=new Chart(document.getElementById("chartCanvas"),{
-          type:'line',
-          data:{labels:labels,datasets:[{label:title,data:values,borderColor:'#1ecbe1',backgroundColor:'rgba(30,203,225,0.2)',tension:0.2,pointRadius:2}]},
-          options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:unit}}}}
+          chart = new Chart(document.getElementById("chartCanvas"), {
+            type: 'line',
+            data: {
+              labels: labels,
+              datasets: [{
+                label: type,
+                data: values,
+                borderColor: '#1ecbe1',
+                backgroundColor: 'rgba(30,203,225,0.2)',
+                tension: 0.2,
+                pointRadius: 2
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: { y: { title: { display: true, text: unit } } }
+            }
+          });
         });
-
-        document.getElementById("modal").style.display="flex";
-      } catch(err){console.error("Chart fetch error:",err);}
     }
 
-    function closeModal(){document.getElementById("modal").style.display="none";}
+    function closeModal() {
+      document.getElementById("modal").style.display = "none";
+    }
 
-    // Initialize
     initMap();
     addSpeedLegend();
     fetchData();
-    setInterval(fetchData,REFRESH_MS);
-
+    setInterval(fetchData, REFRESH_MS);
   </script>
 </body>
 </html>
