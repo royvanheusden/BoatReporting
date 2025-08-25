@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Boat Live Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to bottom, #0a2540, #093a59, #02111d);
+      color: #e0f7ff;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      background: rgba(10, 40, 70, 0.8);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    button {
+      background: #136f9c;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .card {
+      background: rgba(15, 50, 80, 0.7);
+      border-radius: 16px;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .card h2 {
+      margin: 0.3rem 0;
+      font-size: 1.1rem;
+    }
+    .value {
+      font-size: 2rem;
+      font-weight: bold;
+      margin-top: 0.3rem;
+    }
+    #map {
+      grid-column: span 2;
+      height: 350px;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    footer {
+      text-align: center;
+      font-size: 0.8rem;
+      padding: 1rem;
+      color: #a0c7e0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>⚓ Boat Live Dashboard</h1>
+    <button onclick="fetchData()">Refresh</button>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Speed</h2>
+      <div id="speed" class="value">--</div>
+    </div>
+    <div class="card">
+      <h2>Voltage</h2>
+      <div id="voltage" class="value">--</div>
+    </div>
+    <div class="card">
+      <h2>Temperature</h2>
+      <div id="temperature" class="value">--</div>
+    </div>
+    <div class="card">
+      <h2>Float Sensor</h2>
+      <div id="float" class="value">--</div>
+    </div>
+    <div id="map"></div>
+  </main>
+
+  <footer>
+    Data from ThingSpeak • Auto-refresh every 15s
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const API_URL = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=1&location=true";
+    const REFRESH_MS = 15000;
+
+    let map, marker;
+
+    function initMap(lat = 52, lng = 5) {
+      map = L.map("map").setView([lat, lng], 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+      marker = L.marker([lat, lng]).addTo(map);
+    }
+
+    async function fetchData() {
+      try {
+        const res = await fetch(API_URL);
+        const json = await res.json();
+        const latest = json.feeds[json.feeds.length - 1];
+
+        document.getElementById("speed").textContent = latest.field4 ? latest.field4 + " kn" : "--";
+        document.getElementById("voltage").textContent = latest.field1 ? latest.field1 + " V" : "--";
+        document.getElementById("temperature").textContent = latest.field2 ? latest.field2 + " °C" : "--";
+        document.getElementById("float").textContent = latest.field3 === "1" ? "Active" : "Inactive";
+
+        if (latest.latitude && latest.longitude) {
+          const lat = parseFloat(latest.latitude);
+          const lng = parseFloat(latest.longitude);
+          map.setView([lat, lng], 13);
+          marker.setLatLng([lat, lng]).bindPopup(
+            `Speed: ${latest.field4 || "--"} kn<br>` +
+            `Voltage: ${latest.field1 || "--"} V<br>` +
+            `Temp: ${latest.field2 || "--"} °C<br>` +
+            `Float: ${latest.field3 === "1" ? "Active" : "Inactive"}`
+          );
+        }
+      } catch (e) {
+        console.error("Failed to fetch data", e);
+      }
+    }
+
+    // Initialize
+    initMap();
+    fetchData();
+    setInterval(fetchData, REFRESH_MS);
+  </script>
+</body>
+</html>
