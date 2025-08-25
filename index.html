@@ -7,6 +7,8 @@
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     body {
@@ -46,6 +48,11 @@
       padding: 1rem;
       text-align: center;
       box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: scale(1.03);
     }
     .card h2 {
       margin: 0.3rem 0;
@@ -68,6 +75,37 @@
       padding: 1rem;
       color: #a0c7e0;
     }
+    /* Modal for charts */
+    #modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #modal-content {
+      background: #0a2540;
+      padding: 1rem;
+      border-radius: 12px;
+      max-width: 90%;
+      max-height: 80%;
+      color: white;
+    }
+    #modal canvas {
+      max-width: 100%;
+      height: 300px;
+    }
+    #closeBtn {
+      background: #136f9c;
+      border: none;
+      color: white;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
@@ -78,15 +116,15 @@
   </header>
 
   <main>
-    <div class="card">
+    <div class="card" onclick="showChart('field4','Speed (km/h)','km/h')">
       <h2>Speed</h2>
       <div id="speed" class="value">--</div>
     </div>
-    <div class="card">
+    <div class="card" onclick="showChart('field1','Voltage (V)','V')">
       <h2>Voltage</h2>
       <div id="voltage" class="value">--</div>
     </div>
-    <div class="card">
+    <div class="card" onclick="showChart('field2','Temperature (°C)','°C')">
       <h2>Temperature</h2>
       <div id="temperature" class="value">--</div>
     </div>
@@ -101,13 +139,23 @@
     Data from ThingSpeak • Auto-refresh every 15s
   </footer>
 
+  <!-- Modal -->
+  <div id="modal">
+    <div id="modal-content">
+      <button id="closeBtn" onclick="closeModal()">Close</button>
+      <h3 id="chartTitle"></h3>
+      <canvas id="chartCanvas"></canvas>
+    </div>
+  </div>
+
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     const API_URL = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=1&location=true";
+    const HISTORY_URL = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=50&location=true";
     const REFRESH_MS = 15000;
 
-    let map, marker;
+    let map, marker, chart;
 
     function initMap(lat = 52, lng = 5) {
       map = L.map("map").setView([lat, lng], 12);
@@ -123,7 +171,7 @@
         const json = await res.json();
         const latest = json.feeds[json.feeds.length - 1];
 
-        document.getElementById("speed").textContent = latest.field4 ? latest.field4 + " kn" : "--";
+        document.getElementById("speed").textContent = latest.field4 ? latest.field4 + " km/h" : "--";
         document.getElementById("voltage").textContent = latest.field1 ? latest.field1 + " V" : "--";
         document.getElementById("temperature").textContent = latest.field2 ? latest.field2 + " °C" : "--";
         document.getElementById("float").textContent = latest.field3 === "1" ? "Active" : "Inactive";
@@ -133,7 +181,7 @@
           const lng = parseFloat(latest.longitude);
           map.setView([lat, lng], 13);
           marker.setLatLng([lat, lng]).bindPopup(
-            `Speed: ${latest.field4 || "--"} kn<br>` +
+            `Speed: ${latest.field4 || "--"} km/h<br>` +
             `Voltage: ${latest.field1 || "--"} V<br>` +
             `Temp: ${latest.field2 || "--"} °C<br>` +
             `Float: ${latest.field3 === "1" ? "Active" : "Inactive"}`
@@ -142,6 +190,49 @@
       } catch (e) {
         console.error("Failed to fetch data", e);
       }
+    }
+
+    // Chart modal
+    async function showChart(field, title, unit) {
+      try {
+        const res = await fetch(HISTORY_URL);
+        const json = await res.json();
+        const feeds = json.feeds;
+
+        const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString());
+        const values = feeds.map(f => parseFloat(f[field])).filter(v => !isNaN(v));
+
+        document.getElementById("chartTitle").textContent = title;
+
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById("chartCanvas"), {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: title,
+              data: values,
+              borderColor: '#1ecbe1',
+              backgroundColor: 'rgba(30,203,225,0.2)',
+              tension: 0.2,
+              pointRadius: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: { legend: { display: false }},
+            scales: { y: { title: { display: true, text: unit }}}
+          }
+        });
+
+        document.getElementById("modal").style.display = "flex";
+      } catch (err) {
+        console.error("Chart fetch error:", err);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById("modal").style.display = "none";
     }
 
     // Initialize
