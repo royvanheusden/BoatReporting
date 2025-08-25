@@ -187,4 +187,29 @@
         const feeds=json.feeds;
 
         const labels=feeds.map(f=>new Date(f.created_at).toLocaleTimeString());
-        const values=fee
+        const values=feeds.map(f=>parseFloat(f[field])).filter(v=>!isNaN(v));
+
+        document.getElementById("chartTitle").textContent=title;
+
+        if(chart) chart.destroy();
+        chart=new Chart(document.getElementById("chartCanvas"),{
+          type:'line',
+          data:{labels:labels,datasets:[{label:title,data:values,borderColor:'#1ecbe1',backgroundColor:'rgba(30,203,225,0.2)',tension:0.2,pointRadius:2}]},
+          options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:unit}}}}
+        });
+
+        document.getElementById("modal").style.display="flex";
+      } catch(err){console.error("Chart fetch error:",err);}
+    }
+
+    function closeModal(){document.getElementById("modal").style.display="none";}
+
+    // Initialize
+    initMap();
+    addSpeedLegend();
+    fetchData();
+    setInterval(fetchData,REFRESH_MS);
+
+  </script>
+</body>
+</html>
