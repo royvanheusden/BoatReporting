@@ -19,13 +19,13 @@
     .card { background: rgba(15,50,80,0.7); border-radius:16px; padding:1rem; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.3); cursor:pointer; transition: transform 0.2s; }
     .card:hover { transform: scale(1.03);}
     .card h2 { margin:0.3rem 0; font-size:1.1rem;}
-    .value { font-size:3rem; font-weight:bold; margin-top:0.3rem;}
+    .value { font-size:3rem; font-weight:bold; margin-top:0.3rem;} /* keep dashboard values readable but compact */
     #map { grid-column: span 2; height:450px; border-radius:16px; overflow:hidden;}
     footer { text-align:center; font-size:0.8rem; padding:1rem; color:#a0c7e0;}
     /* Modal for charts */
     #modal { position:fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; z-index:1000;}
     #modal-content { background:#0a2540; padding:1rem; border-radius:12px; max-width:95%; max-height:95%; color:white;}
-    #modal canvas { width:100%; height:500px;}
+    #modal canvas { width:100%; height:500px;} /* big chart */
     #closeBtn { background:#136f9c; border:none; color:white; padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; margin-bottom:0.5rem;}
   </style>
 </head>
@@ -76,7 +76,7 @@
     const API_HISTORY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=200&location=true&days=1";
     const API_FULL_DAY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=8000&location=true&days=1";
     const REFRESH_MS = 15000;
-    const TOP_SPEED = 12; // km/h for coloring
+    const TOP_SPEED = 12;
 
     let map, marker, chart, polyline, startMarker, endMarker;
 
@@ -87,11 +87,10 @@
     }
 
     function speedColor(speed){
-      const ratio = Math.min(speed/TOP_SPEED,1);
-      // Blue → Cyan → Yellow → Red
-      if(ratio<0.33) return `rgb(0,${Math.floor(255*ratio*3)},255)`; // blue→cyan
-      if(ratio<0.66) return `rgb(${Math.floor(255*(ratio-0.33)*3)},255,255)`; // cyan→yellow
-      return `rgb(255,${Math.floor(255*(1-(ratio-0.66)*3))},0)`; // yellow→red
+      const ratio=Math.min(speed/TOP_SPEED,1);
+      if(ratio<0.33) return `rgb(0,${Math.floor(255*ratio*3)},255)`;
+      if(ratio<0.66) return `rgb(${Math.floor(255*(ratio-0.33)*3)},255,255)`;
+      return `rgb(255,${Math.floor(255*(1-(ratio-0.66)*3))},0)`;
     }
 
     async function fetchData(){
@@ -126,22 +125,19 @@
         const res=await fetch(API_FULL_DAY);
         const json=await res.json();
         const feeds=json.feeds.filter(f=>f.latitude && f.longitude);
-
         const latlngs=feeds.map(f=>[parseFloat(f.latitude),parseFloat(f.longitude),parseFloat(f.field4)||0]);
 
-        // Remove old polyline
+        // Remove old layers
         if(polyline) map.removeLayer(polyline);
-
-        // Create colored segments for speed
-        for(let i=0;i<latlngs.length-1;i++){
-          const seg = L.polyline([latlngs[i],latlngs[i+1]],{color:speedColor(latlngs[i][2]),weight:4}).addTo(map);
-        }
-
-        // Remove old markers
         if(startMarker) map.removeLayer(startMarker);
         if(endMarker) map.removeLayer(endMarker);
 
-        // Start & End
+        // Draw colored segments for speed
+        for(let i=0;i<latlngs.length-1;i++){
+          L.polyline([latlngs[i],latlngs[i+1]],{color:speedColor(latlngs[i][2]),weight:4}).addTo(map);
+        }
+
+        // Start & End markers
         if(latlngs.length>0){
           startMarker=L.marker(latlngs[0],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190411.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("Start");
           endMarker=L.marker(latlngs[latlngs.length-1],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190423.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("End");
@@ -179,11 +175,9 @@
 
     function closeModal(){document.getElementById("modal").style.display="none";}
 
-    // Initialize
     initMap();
     fetchData();
     setInterval(fetchData,REFRESH_MS);
-
   </script>
 </body>
 </html>
