@@ -19,13 +19,13 @@
     .card { background: rgba(15,50,80,0.7); border-radius:16px; padding:1rem; text-align:center; box-shadow:0 4px 10px rgba(0,0,0,0.3); cursor:pointer; transition: transform 0.2s; }
     .card:hover { transform: scale(1.03);}
     .card h2 { margin:0.3rem 0; font-size:1.1rem;}
-    .value { font-size:2.5rem; font-weight:bold; margin-top:0.3rem;}
-    #map { grid-column: span 2; height:400px; border-radius:16px; overflow:hidden;}
+    .value { font-size:3rem; font-weight:bold; margin-top:0.3rem;}
+    #map { grid-column: span 2; height:450px; border-radius:16px; overflow:hidden;}
     footer { text-align:center; font-size:0.8rem; padding:1rem; color:#a0c7e0;}
     /* Modal for charts */
     #modal { position:fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; z-index:1000;}
-    #modal-content { background:#0a2540; padding:1rem; border-radius:12px; max-width:95%; max-height:90%; color:white;}
-    #modal canvas { max-width:100%; height:400px;}
+    #modal-content { background:#0a2540; padding:1rem; border-radius:12px; max-width:95%; max-height:95%; color:white;}
+    #modal canvas { width:100%; height:500px;}
     #closeBtn { background:#136f9c; border:none; color:white; padding:0.4rem 0.8rem; border-radius:6px; cursor:pointer; margin-bottom:0.5rem;}
   </style>
 </head>
@@ -72,28 +72,37 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const API_LATEST = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=1&location=true";
-    const API_HISTORY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=200&location=true";
-    const API_FULL_DAY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=8000&location=true"; // entire day
+    const API_LATEST = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=1&location=true&days=1";
+    const API_HISTORY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=200&location=true&days=1";
+    const API_FULL_DAY = "https://api.thingspeak.com/channels/2831954/feeds.json?api_key=W5FGDFBD5PK7GY2T&results=8000&location=true&days=1";
     const REFRESH_MS = 15000;
+    const TOP_SPEED = 12; // km/h for coloring
 
     let map, marker, chart, polyline, startMarker, endMarker;
 
-    function initMap(lat=52, lng=5){
+    function initMap(lat=52,lng=5){
       map = L.map("map").setView([lat,lng],12);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
-      marker = L.marker([lat,lng]).addTo(map);
+      marker=L.marker([lat,lng]).addTo(map);
+    }
+
+    function speedColor(speed){
+      const ratio = Math.min(speed/TOP_SPEED,1);
+      // Blue → Cyan → Yellow → Red
+      if(ratio<0.33) return `rgb(0,${Math.floor(255*ratio*3)},255)`; // blue→cyan
+      if(ratio<0.66) return `rgb(${Math.floor(255*(ratio-0.33)*3)},255,255)`; // cyan→yellow
+      return `rgb(255,${Math.floor(255*(1-(ratio-0.66)*3))},0)`; // yellow→red
     }
 
     async function fetchData(){
       try {
-        const res = await fetch(API_LATEST);
-        const json = await res.json();
-        const latest = json.feeds[json.feeds.length-1];
+        const res=await fetch(API_LATEST);
+        const json=await res.json();
+        const latest=json.feeds[json.feeds.length-1];
 
-        document.getElementById("speed").textContent = latest.field4?latest.field4+" km/h":"--";
-        document.getElementById("voltage").textContent = latest.field1?latest.field1+" V":"--";
-        document.getElementById("temperature").textContent = latest.field2?latest.field2+" °C":"--";
+        document.getElementById("speed").textContent = latest.field4 ? parseFloat(latest.field4).toFixed(1)+" km/h":"--";
+        document.getElementById("voltage").textContent = latest.field1 ? parseFloat(latest.field1).toFixed(1)+" V":"--";
+        document.getElementById("temperature").textContent = latest.field2 ? parseFloat(latest.field2).toFixed(1)+" °C":"--";
         document.getElementById("float").textContent = latest.field3==="1"?"Active":"Inactive";
 
         if(latest.latitude && latest.longitude){
@@ -101,29 +110,32 @@
           const lng=parseFloat(latest.longitude);
           map.setView([lat,lng],13);
           marker.setLatLng([lat,lng]).bindPopup(
-            `Speed: ${latest.field4 || "--"} km/h<br>`+
-            `Voltage: ${latest.field1 || "--"} V<br>`+
-            `Temp: ${latest.field2 || "--"} °C<br>`+
+            `Speed: ${latest.field4?parseFloat(latest.field4).toFixed(1):"--"} km/h<br>`+
+            `Voltage: ${latest.field1?parseFloat(latest.field1).toFixed(1):"--"} V<br>`+
+            `Temp: ${latest.field2?parseFloat(latest.field2).toFixed(1):"--"} °C<br>`+
             `Float: ${latest.field3==="1"?"Active":"Inactive"}`
           );
         }
 
         await plotFullTrip();
-
-      } catch(e){
-        console.error("Fetch error:",e);
-      }
+      } catch(e){console.error("Fetch error:",e);}
     }
 
     async function plotFullTrip(){
       try {
-        const res = await fetch(API_FULL_DAY);
-        const json = await res.json();
+        const res=await fetch(API_FULL_DAY);
+        const json=await res.json();
         const feeds=json.feeds.filter(f=>f.latitude && f.longitude);
 
-        const latlngs = feeds.map(f=>[parseFloat(f.latitude), parseFloat(f.longitude)]);
+        const latlngs=feeds.map(f=>[parseFloat(f.latitude),parseFloat(f.longitude),parseFloat(f.field4)||0]);
+
+        // Remove old polyline
         if(polyline) map.removeLayer(polyline);
-        polyline=L.polyline(latlngs,{color:'cyan'}).addTo(map);
+
+        // Create colored segments for speed
+        for(let i=0;i<latlngs.length-1;i++){
+          const seg = L.polyline([latlngs[i],latlngs[i+1]],{color:speedColor(latlngs[i][2]),weight:4}).addTo(map);
+        }
 
         // Remove old markers
         if(startMarker) map.removeLayer(startMarker);
@@ -131,8 +143,8 @@
 
         // Start & End
         if(latlngs.length>0){
-          startMarker = L.marker(latlngs[0],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190411.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("Start");
-          endMarker = L.marker(latlngs[latlngs.length-1],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190423.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("End");
+          startMarker=L.marker(latlngs[0],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190411.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("Start");
+          endMarker=L.marker(latlngs[latlngs.length-1],{icon:L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/190/190423.png',iconSize:[25,41],iconAnchor:[12,41]})}).addTo(map).bindPopup("End");
         }
 
         // Waypoints every 10 points
@@ -140,24 +152,22 @@
           L.circleMarker(latlngs[i],{radius:4,color:'blue',fillOpacity:0.7}).addTo(map);
         }
 
-      } catch(e){
-        console.error("Trip plot error:",e);
-      }
+      } catch(e){console.error("Trip plot error:",e);}
     }
 
     async function showChart(field,title,unit){
       try {
-        const res = await fetch(API_HISTORY);
-        const json = await res.json();
-        const feeds = json.feeds;
+        const res=await fetch(API_HISTORY);
+        const json=await res.json();
+        const feeds=json.feeds;
 
-        const labels = feeds.map(f=>new Date(f.created_at).toLocaleTimeString());
-        const values = feeds.map(f=>parseFloat(f[field])).filter(v=>!isNaN(v));
+        const labels=feeds.map(f=>new Date(f.created_at).toLocaleTimeString());
+        const values=feeds.map(f=>parseFloat(f[field])).filter(v=>!isNaN(v));
 
-        document.getElementById("chartTitle").textContent = title;
+        document.getElementById("chartTitle").textContent=title;
 
         if(chart) chart.destroy();
-        chart = new Chart(document.getElementById("chartCanvas"),{
+        chart=new Chart(document.getElementById("chartCanvas"),{
           type:'line',
           data:{labels:labels,datasets:[{label:title,data:values,borderColor:'#1ecbe1',backgroundColor:'rgba(30,203,225,0.2)',tension:0.2,pointRadius:2}]},
           options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:unit}}}}
@@ -173,6 +183,7 @@
     initMap();
     fetchData();
     setInterval(fetchData,REFRESH_MS);
+
   </script>
 </body>
 </html>
